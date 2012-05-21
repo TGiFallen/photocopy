@@ -18,6 +18,10 @@
 //, package.seeall
 local table = table
 local hook = hook
+local coroutine = coroutine 
+
+local coroutine_resume = coroutine.resume
+local coroutine_yield = coroutine.yield
 
 local concat = table.concat
 local type = type 
@@ -32,6 +36,9 @@ local pcall = pcall
 local unpack = unpack 
 local ErrorNoHalt = ErrorNoHalt 
 local AccessorFunc = AccessorFunc 
+local SysTime = SysTime 
+local CreateConVar = CreateConVar 
+local FrameTime = FrameTime 
 
 local PrintTable = PrintTable 
 local MsgN = MsgN 
@@ -136,6 +143,90 @@ function FreezeAllPhysObjs(ent)
 end
 
 ------------------------------------------------------------
+-- ProcessManager
+------------------------------------------------------------
+-- this convar means that when it's set to 50, it will take 50 miliseconds of processing time AT 100 frames per second
+local alloted 
+if CLIENT then
+    alloted = CreateClientConVar("photocopy_process_speed_miliseconds_cl", "100", { FCVAR_ARCHIVE })
+else
+    alloted = CreateConVar("photocopy_process_speed_miliseconds_sv", "30", { FCVAR_ARCHIVE })
+end
+
+ProcessManager = {
+}
+local start , thread = SysTime()
+local totaltime , hightime , medtime , lowtime
+local stack = {
+    high = {},
+    med = {},
+    low = {},
+}
+
+hook.Add("Think", "PhotocopyIterativeProcessor" , function()
+    start = SysTime()
+
+    totaltime = ProcessManager.GetProcessTime()
+    hightime = totaltime * 2/3
+    medtime = totaltime * 1/4
+    lowtime = totaltime * 1/12
+
+    if not stack.high[1] then 
+        medtime = medtime + hightime
+    else
+        while (start + hightime) > SysTime() do
+            if not ProcessManager.Process( stack.high[1] , "high" ) then
+                break 
+            end
+        end
+    end
+
+    if not stack.med[1] then
+        lowtime = lowtime + medtime
+    else
+        while (start + medtime) > SysTime() do
+            if not ProcessManager.Process( stack.med[1] , "med" ) then
+                break 
+            end
+        end
+    end
+
+    if not stack.low[1] then
+        hightime = hightime + lowtime
+    else
+        while (start + lowtime) > SysTime() do
+            if not ProcessManager.Process( stack.low[1] , "low" ) then
+                break 
+            end
+        end
+    end
+end)
+
+function ProcessManager.GetProcessTime()
+    return (1/((FrameTime()) *100)) * ( alloted:GetInt() / 1000 )
+end
+
+function ProcessManager.AddToProcessors( priority , processor )
+    if priority < 0.1 then
+        stack.high[ #stack.high + 1 ] = processor
+    elseif priority < 0.2 then
+        stack.med[ #stack.med + 1 ] = processor
+    else
+        stack.low[ #stack.low + 1 ] = processor
+    end
+end
+
+function ProcessManager.Process( processor ,priority)
+    if not processor:Advance() then
+        processor.Finished = true
+        processor:Stop()
+        table.remove( stack[priority] , 1 )
+        return false
+    end
+    return true
+end
+
+------------------------------------------------------------
 -- IterativeProcessor
 ------------------------------------------------------------
 
@@ -148,8 +239,20 @@ function IterativeProcessor:__construct(data)
     self.Error = nil
     self.Warnings = {}
     self.Callbackargs = {}
-    self.NextThinkTime = 0
+    self.Priority = 0
     self.NextFunc = nil
+
+    self.Thread = coroutine.create( function( self ) 
+        while self.Runtimes > self.Timesrun do
+            self.NextFunc( self )
+            self.Timesrun = self.Timesrun + 1
+            coroutine_yield()
+        end
+
+        return false
+    end)
+    self.Runtimes = 0
+    self.Timesrun = 0
 end
 
 function IterativeProcessor:OnSuccess() end
@@ -161,35 +264,34 @@ function IterativeProcessor:Start(callback, errback , ...)
         self.OnSuccess = callback
         self.OnError = errback
     end
-    
-    hook.Add("Think", "PhotocopyIterativeProcessor" .. tostring(self), function()
-        if CurTime() < self.NextThinkTime then return end
-        if not self:Advance() then
-            self:Stop()
-            self.Finished = true
-        end
-    end)
+
+    ProcessManager.AddToProcessors( self.Priority , self )
 end
 
 function IterativeProcessor:Stop()
-    hook.Remove("Think", "PhotocopyIterativeProcessor" .. tostring(self))
+    if self.Finished then
+        self:OnSuccess(unpack(self.Callbackargs))
+    elseif self.OnError then
+        self:OnError(unpack(self.Callbackargs))
+    end
 end
 
 function IterativeProcessor:SetNext(t, func)
-    self.NextThinkTime = CurTime() + t
-    if func then self.NextFunc = func end
+    self.Priority = t
+    self.Runtimes = self.Runtimes + 1
+
+    if func then
+        self.NextFunc = func
+    end
     if func == false then self.NextFunc = nil end
 end
 
 function IterativeProcessor:Advance()
     if self:GetError() then return false end
     
-    if self.NextFunc then
-        self.NextFunc(self)
-        return true
+    if self.Thread then
+        return coroutine_resume( self.Thread , self )
     else
-        self.Finished = true
-        self:OnSuccess(unpack(self.Callbackargs))
         return false
     end
 end

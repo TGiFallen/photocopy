@@ -154,7 +154,7 @@ function TOOL:SendDupeFileInfo()
 		end
 	end
 
-	file.TFind("data/"..self.Path .. "*" , recursefind)
+	//file.TFind("data/"..self.Path .. "*" , recursefind)
 end
 
 
@@ -188,6 +188,7 @@ end
 
 function TOOL:LeftClick( trace )
 	if CLIENT then return true end
+
 	local ply = self:GetOwner()
 	MsgN(self:GetOffset())
 	local hitpos = trace.HitPos + self:GetOffset()
@@ -198,10 +199,14 @@ function TOOL:LeftClick( trace )
 	paster:Start(function()
 	    ply:PrintMessage(HUD_PRINTTALK, "Paste done!")
 	end)
+
 	
 	return true
 end
-
+--[[
+	
+	
+--]]
 function TOOL:RightClick( trace )
 	if CLIENT then 
 		//self.clGhoster:RemoveGhosts()
@@ -294,9 +299,9 @@ end
 
 if CLIENT then
 	function TOOL.BuildCPanel( cp )
-		cp:ClearControls()
-		local CPanel = cp
-		cp.Menu = cp:AddControl("CC_Base",{})
+		//cp:ClearControls()
+		//local CPanel = cp
+		//cp.Menu = cp:AddControl("CC_Base",{})
 		//cp:AddControl("CC_Base",{})
 		//local panel = vgui.Create("CC_Base",cp)
 		//cp:AddPanel(panel)

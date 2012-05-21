@@ -98,6 +98,32 @@ function RegisterEntityTableModifier(id, func)
     EntityTableModifiers[id] = func
 end
 
+
+------------------------------------------------------------
+-- CopyTable
+------------------------------------------------------------
+
+local CopyTable = putil.CreateClass(putil.IterativeProcessor)
+
+--- Construct an asynchronous table copier, keeps server from chocking
+-- @param to Table to copy second table to
+-- @param from Table to copy from
+function CopyTable:__construct( to , from )
+    putil.IterativeProcessor.__construct(self)
+    self.to = to
+    self.from = from
+    self:SetNext( 0 , self.CopyTable )
+end
+
+
+function CopyTable:CopyTable( )
+    self.key , self.value = next( self.from , self.key)
+    self.to[ self.key ] = self.value
+    if self.value then self:SetNext(0) end
+    self.num = self.num+1
+end
+
+
 ------------------------------------------------------------
 -- Clipboard
 ------------------------------------------------------------
@@ -156,10 +182,7 @@ function Clipboard:CopyEntTable(ent)
         end
     end
     entTable.FlexScale = ent:GetFlexScale()
-    
-    -- Toybox
-    entTable.ToyboxID = ent:GetToyboxID()
-	
+    	
     -- For entities that are a part of the map
     -- Ignoring this for now
     --[[
@@ -412,8 +435,10 @@ Paster = putil.CreateClass(putil.IterativeProcessor)
 function Paster:__construct(clipboard, ply, originPos, originAng)
     putil.IterativeProcessor.__construct(self)
     
-    self.EntityData = table.Copy(clipboard.EntityData)
-    self.ConstraintData = table.Copy(clipboard.ConstraintData)
+    self.EntityData = {}
+    photocopy.CopyTable( self.EntityData , clipboard.EntityData)
+    self.ConstraintData = {}
+    photocopy.CopyTable( self.ConstraintData , clipboard.ConstraintData)
     self.Player = ply
     self.Pos = originPos
     self.Ang = originAng
@@ -432,6 +457,17 @@ function Paster:__construct(clipboard, ply, originPos, originAng)
     self:SetNext(0, self._Spawn)
     
     self:CreateHelperEnt()
+end
+
+--- copies a table without choking a server
+-- @param table to be copied
+-- @return copied table
+function Paster:CopyTable( )
+    local ret = {}
+    for key , value in pairs(self.table) do
+        ret[ key ] = value
+        coroutine.yield()
+    end
 end
 
 --- Transform a position and angle according to the offsets. This function
@@ -1226,8 +1262,8 @@ function svFileNetworker:__construct( ply )
     putil.IterativeProcessor.__construct(self)
     self.ply = ply
 
-    datastream.Hook("photocopy_serverfiletransfer"..tostring(ply) , function( pl , handler , id , encoded , decoded ) self:ReceiveFile( pl , decoded) end)
-    hook.Add("AcceptStream" , "photocopy_serverfiletransfer"..tostring(ply) , function(pl) return pl == ply end)
+    //datastream.Hook("photocopy_serverfiletransfer"..tostring(ply) , function( pl , handler , id , encoded , decoded ) self:ReceiveFile( pl , decoded) end)
+    //hook.Add("AcceptStream" , "photocopy_serverfiletransfer"..tostring(ply) , function(pl) return pl == ply end)
 end
 
 
@@ -1401,7 +1437,7 @@ MsgN("Photocopy %Version$ loaded (http://www.sk89q.com/projects/photocopy/)")
 
 include("photocopy/compat.lua")
 
-local list = file.FindInLua("photocopy/formats/*.lua")
+local list = file.Find( "photocopy/formats/*.lua", LUA_PATH )
 for _, f in pairs(list) do
 	MsgN("Photocopy: Auto-loading format file: " .. f)
     include("photocopy/formats/" .. f)

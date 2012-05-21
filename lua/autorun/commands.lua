@@ -25,7 +25,7 @@ end)
 if SERVER then
 	net.Receive("command_call",function(len,ply)
 		local name = net.ReadLong()
-		local args = glon.decode(net.ReadString())
+		local args = glon.decode(util.Decompress(net.ReadString()))
 
 		table.insert(args , 1 , ply)
 		for i = 1 , #extraargs[ name ] do
@@ -63,21 +63,21 @@ function Command.Add( name , func , ... )
 	net.Start("command_pool")
 		net.WriteString( name )
 		net.WriteLong( idx )
-	if SERVER then net.BroadCast() else net.SendToServer() end
+	if SERVER then net.Broadcast() else net.SendToServer() end
 end
 
 if SERVER then
 	function Command.Call( name , ply , ...)
 		net.Start("command_call")
 			net.WriteLong(cmdlook[name])
-			net.WriteString(glon.encode({...}))
+			net.WriteString(util.Compress(glon.encode({...})))
 		net.Send(ply)
 	end
 else
 	function Command.Call( name , ... )
 		net.Start("command_call")
 			net.WriteLong(cmdlook[name])
-			net.WriteString(glon.encode({...}))
-		net.SendToServer
+			net.WriteString(util.Compress(glon.encode({...})))
+		net.SendToServer()
 	end
 end
