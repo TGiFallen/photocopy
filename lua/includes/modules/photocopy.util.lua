@@ -19,6 +19,7 @@
 local table = table
 local hook = hook
 local coroutine = coroutine 
+local debug = debug 
 
 local coroutine_resume = coroutine.resume
 local coroutine_yield = coroutine.yield
@@ -156,74 +157,51 @@ end
 ProcessManager = {
 }
 local start , thread = SysTime()
-local totaltime , hightime , medtime , lowtime
-local stack = {
-    high = {},
-    med = {},
-    low = {},
-}
+local stack = {}
 
 hook.Add("Think", "PhotocopyIterativeProcessor" , function()
     start = SysTime()
 
-    totaltime = ProcessManager.GetProcessTime()
-    hightime = totaltime * 2/3
-    medtime = totaltime * 1/4
-    lowtime = totaltime * 1/12
-
-    if not stack.high[1] then 
-        medtime = medtime + hightime
-    else
-        while (start + hightime) > SysTime() do
-            if not ProcessManager.Process( stack.high[1] , "high" ) then
-                break 
+    if stack[1] then 
+        while (start + ProcessManager.GetProcessTime()) > SysTime() do
+            if not ProcessManager.Process( stack[1] ) then
+                stack[1].Finished = true
+                stack[1]:Stop()
+                table.remove( stack , 1 )
+                for k , tab in pairs(stack) do
+                    //MsgN(k,":")
+                    for k2 , v in pairs(tab) do
+                        //MsgN("\t",k2," =\t",v)
+                    end
+                end
+                MsgN("ONE PROCESS DONE\n\n\n\n")
             end
-        end
-    end
 
-    if not stack.med[1] then
-        lowtime = lowtime + medtime
-    else
-        while (start + medtime) > SysTime() do
-            if not ProcessManager.Process( stack.med[1] , "med" ) then
-                break 
-            end
         end
+        
     end
-
-    if not stack.low[1] then
-        hightime = hightime + lowtime
-    else
-        while (start + lowtime) > SysTime() do
-            if not ProcessManager.Process( stack.low[1] , "low" ) then
-                break 
-            end
-        end
-    end
+    //MsgN("End of Frame, it took: " , SysTime() - start , "\tIt had: " , ProcessManager.GetProcessTime())
 end)
+function ProcessManager.Debug()
+    MsgN("\n\n\n")
+    PrintTable( stack )
+    MsgN("\n\n\n")
+end
 
 function ProcessManager.GetProcessTime()
     return (1/((FrameTime()) *100)) * ( alloted:GetInt() / 1000 )
 end
 
-function ProcessManager.AddToProcessors( priority , processor )
-    if priority < 0.1 then
-        stack.high[ #stack.high + 1 ] = processor
-    elseif priority < 0.2 then
-        stack.med[ #stack.med + 1 ] = processor
-    else
-        stack.low[ #stack.low + 1 ] = processor
-    end
+function ProcessManager.AddToProcessors( processor )
+    stack[ #stack + 1 ] = processor
 end
 
-function ProcessManager.Process( processor ,priority)
-    if not processor:Advance() then
-        processor.Finished = true
-        processor:Stop()
-        table.remove( stack[priority] , 1 )
-        return false
+function ProcessManager.Process( processor )
+    if processor then 
+        return processor:Advance()
+    else 
+        return false 
     end
-    return true
 end
 
 ------------------------------------------------------------
@@ -244,8 +222,8 @@ function IterativeProcessor:__construct(data)
 
     self.Thread = coroutine.create( function( self ) 
         while self.Runtimes > self.Timesrun do
-            self.NextFunc( self )
             self.Timesrun = self.Timesrun + 1
+            self.NextFunc( self )
             coroutine_yield()
         end
 
@@ -265,7 +243,9 @@ function IterativeProcessor:Start(callback, errback , ...)
         self.OnError = errback
     end
 
-    ProcessManager.AddToProcessors( self.Priority , self )
+    ProcessManager.AddToProcessors( self )
+    //MsgN("FDFD")
+    //PrintTable(stack)
 end
 
 function IterativeProcessor:Stop()
@@ -277,7 +257,6 @@ function IterativeProcessor:Stop()
 end
 
 function IterativeProcessor:SetNext(t, func)
-    self.Priority = t
     self.Runtimes = self.Runtimes + 1
 
     if func then

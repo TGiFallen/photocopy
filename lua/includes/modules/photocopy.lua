@@ -115,12 +115,19 @@ function CopyTable:__construct( to , from )
     self:SetNext( 0 , self.CopyTable )
 end
 
-
+--[[
 function CopyTable:CopyTable( )
     self.key , self.value = next( self.from , self.key)
     self.to[ self.key ] = self.value
     if self.value then self:SetNext(0) end
     self.num = self.num+1
+end
+--]]
+function CopyTable:CopyTable()
+    for key , value in pairs( self.from ) do
+        self.to[ key ] = value
+        coroutine.yield()
+    end
 end
 
 
@@ -182,15 +189,7 @@ function Clipboard:CopyEntTable(ent)
         end
     end
     entTable.FlexScale = ent:GetFlexScale()
-    	
-    -- For entities that are a part of the map
-    -- Ignoring this for now
-    --[[
-    if ent:CreatedByMap() then
-		entTable.MapCreationID = ent:MapCreationID()
-	end
-    ]]--
-    
+        
     if ent.OnEntityCopyTableFinish then
         ent:OnEntityCopyTableFinish(entTable)
     end
@@ -1326,8 +1325,6 @@ function svFileNetworker:ReceiveFile( ply , tab )
         self.OnFailed()
     end
 end
-
-
 
 
 end
