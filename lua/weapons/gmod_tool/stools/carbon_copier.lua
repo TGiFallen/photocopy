@@ -188,6 +188,7 @@ end
 
 function TOOL:LeftClick( trace )
 	if CLIENT then return true end
+	MsgN("HoHoHo")
 
 	local ply = self:GetOwner()
 	MsgN(self:GetOffset())
@@ -213,6 +214,7 @@ function TOOL:RightClick( trace )
 		return true 
 	end
 	local ent = trace.Entity
+	MsgN(ent)
 	if !IsValid(ent) or ent:IsWorld() or ent:IsPlayer() then return end
 
 	self.clipboard = photocopy.Clipboard( ent:LocalToWorld( ent:OBBCenter() ) )
@@ -221,7 +223,8 @@ function TOOL:RightClick( trace )
 
 	self:GroundOffset(self.clipboard)
 	self.svGhoster:Initialize( self.clipboard , self.offset )
-	self.svGhoster:Start()	
+	self.svGhoster:Start()
+	MsgN( coroutine.status(self.svGhoster.Thread) )
 	return true
 end
 

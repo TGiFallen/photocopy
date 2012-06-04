@@ -200,13 +200,23 @@ function ProcessManager.Process( processor )
     if processor then 
         return processor:Advance()
     else 
-        return false 
+        return true
     end
 end
 
 ------------------------------------------------------------
 -- IterativeProcessor
 ------------------------------------------------------------
+
+local function coroutineproxy( self ) 
+    while self.Runtimes > self.Timesrun do
+        self.Timesrun = self.Timesrun + 1
+        self.NextFunc( self )
+        coroutine_yield()
+    end
+
+    return false
+end
 
 IterativeProcessor = CreateClass()
 
@@ -220,17 +230,10 @@ function IterativeProcessor:__construct(data)
     self.Priority = 0
     self.NextFunc = nil
 
-    self.Thread = coroutine.create( function( self ) 
-        while self.Runtimes > self.Timesrun do
-            self.Timesrun = self.Timesrun + 1
-            self.NextFunc( self )
-            coroutine_yield()
-        end
-
-        return false
-    end)
     self.Runtimes = 0
     self.Timesrun = 0
+
+    self.Thread = coroutine.create( coroutineproxy )
 end
 
 function IterativeProcessor:OnSuccess() end
@@ -249,6 +252,7 @@ function IterativeProcessor:Start(callback, errback , ...)
 end
 
 function IterativeProcessor:Stop()
+    self.Thread = coroutine.create( coroutineproxy )
     if self.Finished then
         self:OnSuccess(unpack(self.Callbackargs))
     elseif self.OnError then
@@ -257,7 +261,7 @@ function IterativeProcessor:Stop()
 end
 
 function IterativeProcessor:SetNext(t, func)
-    self.Runtimes = self.Runtimes + 1
+    self.Runtimes = (self.Runtimes + 1) or 0
 
     if func then
         self.NextFunc = func
