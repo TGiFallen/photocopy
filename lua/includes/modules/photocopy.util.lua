@@ -247,7 +247,6 @@ function IterativeProcessor:Start(callback, errback , ...)
     end
 
     ProcessManager.AddToProcessors( self )
-    //MsgN("FDFD")
     //PrintTable(stack)
 end
 
